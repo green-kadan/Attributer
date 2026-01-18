@@ -1,0 +1,36 @@
+HKCR
+{
+	NoRemove CLSID
+	{
+		ForceRemove {470bf21b-4846-11d4-a53b-0000f87a6bf9} = s 'Attributer Class'
+		{
+			InprocServer32 = s '%MODULE%'
+			{
+				val ThreadingModel = s 'Apartment'
+			}
+			TypeLib = s '{d72d850d-9090-47ba-b44b-A8bf22a013d9}'
+			Version = s '1.0'
+		}
+	}
+	NoRemove *
+    {
+        NoRemove shellex
+        {
+            NoRemove PropertySheetHandlers
+            {
+                Attributer = s '{470bf21b-4846-11d4-a53b-0000f87a6bf9}'
+            }
+        }
+    }
+    NoRemove Folder
+    {
+        NoRemove shellex
+        {
+            NoRemove PropertySheetHandlers
+            {
+                Attributer = s '{470bf21b-4846-11d4-a53b-0000f87a6bf9}'
+            }
+        }
+    }
+
+}

@@ -1,0 +1,33 @@
+﻿// AttrShlExt.idl : AttrShlExt の IDL ソース
+//
+
+// このファイルは、タイプ ライブラリ ([!output SAFE_IDL_NAME].tlb) およびマーシャリング コードを
+// タイプ ライブラリ (AttrShlExt.tlb) とマーシャリング コードを生成します。
+
+import "oaidl.idl";
+import "ocidl.idl";
+
+[
+	object,
+	uuid(7ed285b5-f0d8-4f3b-be11-6b34185258fa),
+	pointer_default(unique)
+]
+interface IAttrShlExt : IUnknown {
+};
+[
+	uuid(d72d850d-9090-47ba-b44b-A8bf22a013d9),
+	version(1.0)
+]
+library AttrShlExtLib
+{
+	importlib("stdole32.tlb");
+	[
+		uuid(470bf21b-4846-11d4-a53b-0000f87a6bf9)
+	]
+	coclass CAttrShlExt
+	{
+		[default] interface IAttrShlExt;
+	};
+};
+
+
