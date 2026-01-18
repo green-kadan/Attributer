@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "AttrShlExt.h"
 #include "dllmain.h"
+#include "Logger.h"
 #include <vector>
 #include <mutex>
 
@@ -44,8 +45,6 @@ void GetErrorMessage(CStringW* csMessage);
 void GetHRESULTValue(HRESULT hr, CStringW* csMessage);
 
 // グローバル変数
-std::vector<CString> svGlobalMemory;
-std::mutex mtxGlobalMemory;
 CAtlMap<HWND, std::vector<CString>> cmFullPath;
 CAtlMap<HWND, HICON> cmIconHandle;
 CAtlMap<HWND, HMENU> cmContextSame;
@@ -55,11 +54,13 @@ CAtlMap<HWND, HMENU> cmContextOverwrite;
 CAtlMap<HWND, UINT> cmOverwriteId;		// 「上書きする」オプションが選択されているか
 CAtlMap<HWND, BOOL> cmControlChange;	// コントロールの内容が変更されたか
 CAtlMap<HWND, BOOL> cmMessageShow;		// メッセージを表示するか
+CString msg;							// 一時的使用メッセージ
 
 // シェル拡張機能の初期化（データの受け取り）
 STDMETHODIMP CAttrShlExt::Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDataObj, HKEY hProgID)
 {
 	HRESULT hr = S_OK;
+	LOG(_T("[AttrShlExt] Initialize called\n"));
 
 	// コモンコントロールを初期化する
 	INITCOMMONCONTROLSEX iccex = {sizeof(INITCOMMONCONTROLSEX), ICC_DATE_CLASSES};
@@ -88,9 +89,7 @@ STDMETHODIMP CAttrShlExt::Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDat
 	// グローバルメモリオブジェクトに格納されているパスの総数を取得する
 	UINT nPathCount = DragQueryFile(hDrop, 0xFFFFFFFF, NULL, 0);
 
-	// グローバルメモリオブジェクトの内容を退避するグローバル変数を初期化する
-	mtxGlobalMemory.lock();
-	svGlobalMemory.clear();
+	m_selectedFiles.clear(); // グローバルではなくメンバ変数
 
 	// グローバルメモリオブジェクトからフルパスを取得する
 	for (UINT i = 0; i < nPathCount; i++)
@@ -106,18 +105,29 @@ STDMETHODIMP CAttrShlExt::Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDat
 		// パスがルートフォルダの場合, プロパティシートを追加（表示）しない
 		if (CPath(csPath).IsRoot())
 		{
+			LOG(_T("[AttrShlExt] Initialize finished NG\n"));
 			hr = E_FAIL;
 			break;
 		}
 
 		// フルパスを動的配列クラスに格納する
-		svGlobalMemory.push_back(csPath);
+		m_selectedFiles.push_back(csPath);
+		
+		msg.Format(_T("[AttrShlExt] Initialize: Path = %s\n"), csPath);
+		LOG(msg);
 	}
 
 	// グローバルメモリオブジェクトとSTGMEDIUM 構造体を解放する
 	GlobalUnlock(stg.hGlobal);
 	ReleaseStgMedium(&stg);
 
+	msg.Format(_T("[AttrShlExt] Initialize: this = %p\n"), this);
+	LOG(msg);
+
+	msg.Format(_T("[AttrShlExt] Initialize: m_selectedFiles size = %d\n"), (int)m_selectedFiles.size());
+	LOG(msg);
+
+	LOG(_T("[AttrShlExt] Initialize finished OK\n"));
 	return hr;
 }
 
@@ -147,8 +157,15 @@ STDMETHODIMP CAttrShlExt::AddPages(LPFNADDPROPSHEETPAGE pfnAddPropSheet, LPARAM 
 	psp.hInstance = _AtlBaseModule.GetResourceInstance();
 	psp.pcRefParent = (UINT*)&_AtlModule.m_nLockCnt;
 	psp.pfnDlgProc = (DLGPROC)PropPageDlgProc;
-	psp.pfnCallback = PropPageCallbackProc;
-	psp.lParam = NULL;
+	psp.pfnCallback = PropPageCallbackProc;			// ← 寿命管理用
+	psp.lParam = (LPARAM)this;						// ← this を渡す
+
+	msg.Format(_T("[AttrShlExt] AddPages: this = %p\n"), this);
+	LOG(msg);
+
+	msg.Format(_T("[AttrShlExt] AddPages: m_selectedFiles size = %d\n"),
+		(int)this->m_selectedFiles.size());
+	LOG(msg);
 
 	// プロパティシートのハンドルを生成する
 	hPropSheet = CreatePropertySheetPage(&psp);
@@ -290,24 +307,23 @@ BOOL CALLBACK PropPageDlgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 // プロパティシートの作成と破棄時に呼び出されるコールバック関数
 UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
 {
+	CAttrShlExt* pThis = (CAttrShlExt*)ppsp->lParam;
+
 	switch (uMsg)
 	{
-	// プロパティシートの作成時
-    case PSPCB_CREATE:
-
-		// COM ライブラリを初期化する
-		(void)CoInitialize(NULL);
-
+	case PSPCB_ADDREF: // ここで初めて "実際のダイアログ hWnd" が来る
+		msg.Format(_T("[AttrShlExt] PSPCB_ADDREF: this = %p\n"), (void*)ppsp->lParam);
+		LOG(msg);
+		
+		if (pThis)
+			pThis->AddRef();					// ★ ページが生きている間、COMオブジェクトを保持
+		
 		break;
 
 	// プロパティシートの破棄時
 	case PSPCB_RELEASE:
-		//
-		// PROPSHEETPAGE 構造体のlParam メンバーで参照されるデータがあればこのタイミングで解放する必要がある
-		//
-
-		// COM ライブラリを解放する
-		CoUninitialize();
+		if (pThis) 
+			pThis->Release();					// ★ ページ破棄時に Release
 
 		break;
 	}
@@ -318,13 +334,24 @@ UINT CALLBACK PropPageCallbackProc(HWND hWnd, UINT uMsg, LPPROPSHEETPAGE ppsp)
 // ダイアログボックス初期化
 BOOL OnInitDialog(HWND hWnd, WPARAM wParam, LPARAM lParam)
 {
-	// グローバルメモリオブジェクトの内容を退避する
-	cmFullPath[hWnd] = svGlobalMemory;
+	PROPSHEETPAGE* psp = (PROPSHEETPAGE*)lParam;
+	CAttrShlExt* pThis = (CAttrShlExt*)psp->lParam;
 
-	// グローバルメモリオブジェクトの内容を退避したグローバル変数をクリアする
-	svGlobalMemory.clear();
-	svGlobalMemory.shrink_to_fit();
-	mtxGlobalMemory.unlock();
+	msg.Format(_T("[AttrShlExt] OnInitDialog: pThis = %p\n"), pThis);
+	LOG(msg);
+
+	// DEBUG用
+#ifdef _DEBUG
+	if (!pThis) return TRUE;
+	if (pThis->m_selectedFiles.size() == 0 || pThis->m_selectedFiles.size() > 1000) return TRUE;
+#endif
+
+	msg.Format(_T("[AttrShlExt] OnInitDialog: m_selectedFiles size = %d\n"),
+		(int)pThis->m_selectedFiles.size());
+	LOG(msg);
+
+	// メンバ変数からファイルリストを取得
+	cmFullPath[hWnd] = pThis->m_selectedFiles;
 
 	// リソースインスタンスのハンドルを取得する
 	HINSTANCE hInst;

@@ -1,7 +1,7 @@
 #pragma once
 #include "resource.h"
 #include "AttrShlExt_i.h"
-
+#include <vector>
 using namespace ATL;
 
 class ATL_NO_VTABLE CAttrShlExt :
@@ -11,7 +11,13 @@ class ATL_NO_VTABLE CAttrShlExt :
 	public IShellPropSheetExt
 {
 public:
+	std::vector<CString> m_selectedFiles;
+
 	CAttrShlExt()
+	{
+	}
+	
+	~CAttrShlExt()
 	{
 	}
 
