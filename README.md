@@ -11,3 +11,6 @@
 # v.1.7.0 不具合修正バージョン
 - v1.7.0とします。元のファイルがv1.61であり、githubの慣例形式に当てはめてv1.7.0としています。
 - **[リリース版ダウンロード](https://github.com/green-kadan/Attributer/releases)** 
+
+# プロジェクト
+- githubのプロジェクトページ **[Attributer](https://github.com/green-kadan/Attributer)** です。
